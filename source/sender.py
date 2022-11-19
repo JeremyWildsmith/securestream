@@ -65,14 +65,11 @@ def main():
         clientSocket.send(message.encode(FORMAT))
         
         data = clientSocket.recv(SIZE).decode(FORMAT)
-        print(data)
 
         while (data is None):
             # time.sleep(0.5)
             print("DATA DOESN'T EXIST, NEED TO RESEND")
-            print(f"Before: {data}")
             clientSocket.send(message.encode(FORMAT))
-            print(f"After: {data}")
 
         if (data is not None):
             print("DATA EXISTS!")
