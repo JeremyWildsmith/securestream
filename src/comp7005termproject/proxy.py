@@ -7,7 +7,8 @@ proxyFromSender = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 proxyToReceiver = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def main():
+
+def proxy_main():
     RECV_PORT = 5001
     SEND_PORT = 5000
     SIZE = 1024
@@ -85,7 +86,3 @@ def main():
                 proxyFromSender.close()
 
     proxyToReceiver.close()
-        
-
-if __name__ == "__main__":
-    main()

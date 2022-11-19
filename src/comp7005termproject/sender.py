@@ -1,11 +1,11 @@
 import sys
 import socket
 import os
-import time
 
 clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def main():
+
+def sender_main():
     PORT = 5000
     SIZE = 1024
     FORMAT = "utf-8"
@@ -77,6 +77,3 @@ def main():
         print(data)
 
     clientSocket.close()
-
-if __name__ == "__main__":
-    main()

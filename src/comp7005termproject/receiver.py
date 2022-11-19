@@ -4,7 +4,8 @@ import socket
 # Creates server socket.
 serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def main():
+
+def receiver_main():
     PORT = 5000
     SIZE = 1024
     FORMAT = "utf-8"
@@ -38,6 +39,3 @@ def main():
             connection.send("Receiver ACK".encode(FORMAT))
 
         connection.close()
-
-if __name__ == "__main__":
-    main()
