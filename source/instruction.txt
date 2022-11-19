@@ -1,0 +1,47 @@
+Sender:
+
+- Create a sender that reads from the keyboard or a file and writes to a TCP socket.
+- If the sender does not get the acknowledgement in a reasonable time (as determined by
+you) then it resends the packet.
+
+- The sender must take command line arguments for the IP address of the proxy (or
+receiver if the proxy is removed), the port, and, optionally, the file to read
+
+---
+Receiver:
+
+- Create a receiver that reads from a TCP socket and writes to the console.
+- The receiver must send an acknowledgement (not TCP, your own acknowledgement in
+the TCP data) back to the sender (via the proxy)
+
+- The receiver must tame a command line argument for the port to receive from
+
+---
+Proxy:
+
+- Create a proxy that sits between the two hosts that:
+        - Randomly drops data from the sender
+        - Randomly drops acks from the receiver
+
+- The proxy must take command line arguments for the IP address of the receiver, the port
+to send to, and the port to listen on
+- The proxy must have some way to set the % chance of the data packets (from the
+sender) to drop (command line, GUI, or some other means)
+- The proxy must have some way to set the % chance of the ack packets (from the
+receiver) to drop (command line, GUI, or some other means)
+
+---
+Bonus:
+- The proxy has a % chance to delay a data or ack packet
+- A GUI that graphs the data
+- Dynamically changing the % chance to drop (or delay) at runtime
+- Implementing a window based-protocol in instead of send and wait
+
+
+---
+
+- All 3 programs must maintain a list of statistics showing how many packets have been
+sent and received.
+- You must provide a design for the sender, receiver, and proxy
+- You must provide videos (tmux us a good idea) of the sender, receiver, and the proxy
+working
