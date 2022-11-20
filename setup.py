@@ -9,6 +9,7 @@ setup(
             'comp7005-sender = comp7005termproject:sender_main',
             'comp7005-reciever = comp7005termproject:receiver_main',
             'comp7005-proxy = comp7005termproject:proxy_main',
+            'comp7005-test = comp7005termproject:test_main'
         ],
     },
     name='comp7005termproject',

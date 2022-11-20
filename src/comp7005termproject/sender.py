@@ -42,7 +42,7 @@ def sender_main():
     
     clientSocket.connect(server_address)
     print("Connected to: ", server_address)
-
+    """
     if (file_or_key):
         file_exists = os.path.exists(file_name)
 
@@ -75,5 +75,5 @@ def sender_main():
             print("DATA EXISTS!")
             
         print(data)
-
+    """
     clientSocket.close()

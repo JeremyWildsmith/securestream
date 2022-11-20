@@ -4,6 +4,8 @@ src/comp7005termproject/__init__.py
 src/comp7005termproject/proxy.py
 src/comp7005termproject/receiver.py
 src/comp7005termproject/sender.py
+src/comp7005termproject/stream.py
+src/comp7005termproject/test.py
 src/comp7005termproject.egg-info/PKG-INFO
 src/comp7005termproject.egg-info/SOURCES.txt
 src/comp7005termproject.egg-info/dependency_links.txt
