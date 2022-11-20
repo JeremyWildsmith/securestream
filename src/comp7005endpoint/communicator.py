@@ -7,7 +7,7 @@ import threading
 import socket
 import sys
 
-
+"""
 class StreamBridge(threading.Thread):
     BUFFER_BLOCK_SIZE = Stream.PACKET_DATASEG_SIZE
 
@@ -28,7 +28,7 @@ class StreamBridge(threading.Thread):
         self.stop_signal.set()
 
     def run(self):
-        while not self.stop_signal.is_set():
+        while not self.stop_signal.is_set() and self.a.is_open() and self.b.is_open():
             a_in = self.a.read(min_read=StreamBridge.BUFFER_BLOCK_SIZE, timeout=self.buffer_wait / 4)
             b_in = self.b.read(min_read=StreamBridge.BUFFER_BLOCK_SIZE, timeout=self.buffer_wait / 4)
 
@@ -42,13 +42,14 @@ class StreamBridge(threading.Thread):
                     self.b_transmit_time + time.time() + self.buffer_wait
                 self.b_transmit += b_in
 
-            if len(self.a_transmit) > 0 and self.a_transmit_time > time.time():
-                self.a.write(self.a_transmit)
+            if len(self.a_transmit) > 0 and time.time() > self.a_transmit_time:
+                self.b.write(self.a_transmit)
                 self.a_transmit = b''
 
-            if len(self.b_transmit) > 0 and self.b_transmit_time > time.time():
-                self.b.write(self.b_transmit)
+            if len(self.b_transmit) > 0 and time.time() > self.b_transmit_time:
+                self.a.write(self.b_transmit)
                 self.b_transmit = b''
+"""
 
 
 class Client:
@@ -81,6 +82,7 @@ class ServerSocketAttacher(threading.Thread):
     def run(self) -> None:
         try:
             self.stream.attach(self.sock.accept()[0])
+            self.sock.close()
         except Exception as e:
             print(sys.stderr, f"Error attaching stream to remote socket {e}")
             pass

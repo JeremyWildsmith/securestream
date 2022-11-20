@@ -10,8 +10,25 @@ from queue import Queue, Empty
 import time
 from typing import Optional, Callable
 
+from .model.controller import ControllerModel
 
 PacketMutator = Callable[['Packet'], Optional['Packet']]
+
+
+class StatsRelay(PacketMutator):
+    def __init__(self, key: str, controller: ControllerModel, *, inner: PacketMutator = None):
+        self.controller = controller
+        self.inner = inner
+        self.key = key
+
+    def __call__(self, packet: 'Packet'):
+        if self.inner:
+            packet = self.inner(packet)
+
+        if packet:
+            self.controller.post_delta(self.key)
+
+        return packet
 
 
 class NoOpPacketMutator(PacketMutator):
@@ -87,7 +104,11 @@ class StreamWorker(threading.Thread):
         self.stop_event.set()
 
     def write_raw(self, data: Packet):
-        packet_raw = data.save()
+        packet = self.transmit_filter(data)
+        if packet is None:
+            return
+
+        packet_raw = packet.save()
         packet_len = len(packet_raw)
         transmit = struct.pack("I", packet_len) + packet_raw
 
@@ -114,22 +135,24 @@ class StreamWorker(threading.Thread):
             if packet.read_offset == self.local_write_offset and self.pending is not None:
                 self.pending = None
 
-            if packet.write_offset != self.local_read_offset:
-                return
+            if packet.write_offset == self.local_read_offset:
+                self.local_read_offset += 1
+                self.data_out.put(packet.data)
 
-            self.local_read_offset += 1
-            self.data_out.put(packet.data)
-            self.write_raw(Packet.ack(self.local_read_offset))
+            # If the packet was not just an ack (IE transmitted data)
+            # then we want to either acknowledge that data or let remote know what is missing
+            if packet.write_offset >= 0:
+                # Whether we accept the transmission or not, we should let remote know
+                # what is expected next (in the event of a wrong transmission) or that
+                # the prior transmission was acknowledged
+                self.write_raw(Packet.ack(self.local_read_offset))
 
     def transmit_pending(self):
         if self.pending is None:
             return
 
         next_packet = Packet(self.local_read_offset, self.pending.write_offset, self.pending.data)
-        next_packet = self.transmit_filter(next_packet)
-
-        if next_packet is not None:
-            self.write_raw(next_packet)
+        self.write_raw(next_packet)
 
     def try_transmit(self):
         if self.pending:
@@ -150,9 +173,72 @@ class StreamWorker(threading.Thread):
                 pass
 
     def run(self) -> None:
-        while not self.stop_event.is_set():
-            self.try_receive()
-            self.try_transmit()
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    self.try_receive()
+                    self.try_transmit()
+                except ConnectionResetError:
+                    break
+        except BrokenPipeError:
+            self.data_out.put(None)
+
+
+class StreamForwarder:
+    def __init__(self, src: socket.socket, dest: socket.socket, *, mutator: PacketMutator = None):
+        self.src = src
+        self.dest = dest
+        self.recv_buffer = b''
+        self.forward_filter = NoOpPacketMutator if mutator is None else mutator
+
+    def write_raw(self, data: Packet):
+        packet = self.forward_filter(data)
+        if packet is None:
+            return
+
+        packet_raw = packet.save()
+        packet_len = len(packet_raw)
+        transmit = struct.pack("I", packet_len) + packet_raw
+
+        self.dest.sendall(transmit)
+
+    def poll(self):
+        try:
+            expected = math.inf
+            if len(self.recv_buffer) >= 4:
+                expected = 4 + struct.unpack("I", self.recv_buffer[:4])[0]
+
+            ready = select.select([self.src], [], [], 0.01)
+
+            if ready[0]:
+                self.recv_buffer += self.src.recv(4096)
+
+            if len(self.recv_buffer) >= expected:
+                data = self.recv_buffer[4:expected]
+                self.recv_buffer = self.recv_buffer[expected:]
+                self.write_raw(Packet.load(data))
+        except ConnectionError:
+            return False
+
+        return True
+
+
+class StreamBridge(threading.Thread):
+    def __init__(self, sock_a: socket.socket, sock_b: socket.socket,
+                 ab_filter: PacketMutator = None, ba_filter: PacketMutator = None):
+
+        super().__init__()
+
+        self.ab = StreamForwarder(sock_a, sock_b, mutator=ab_filter)
+        self.ba = StreamForwarder(sock_b, sock_a, mutator=ba_filter)
+        self.stop_event = threading.Event()
+
+    def stop(self):
+        self.stop_event.set()
+
+    def run(self) -> None:
+        while self.ab.poll() and self.ba.poll():
+            time.sleep(0.001)
 
 
 class Stream(object):
@@ -164,6 +250,7 @@ class Stream(object):
         self.stream_worker: Optional[StreamWorker] = None
         self.recv_filter = recv_filter
         self.transmit_filter = transmit_filter
+        self.closed = False
 
     def attach(self, sock: socket.socket):
         if self.stream_worker is not None:
@@ -191,18 +278,35 @@ class Stream(object):
         if min_read <= 0:
             while True:
                 try:
-                    buffer += self.data_out.get(block=False)
+                    r = self.data_out.get(block=False)
+
+                    if r is None:
+                        self.closed = True
+                        break
+
+                    buffer += r
                 except Empty:
                     break
         else:
             while len(buffer) < min_read:
                 try:
-                    buffer += self.data_out.get(timeout=timeout)
+                    r = self.data_out.get(timeout=timeout)
+
+                    if r is None:
+                        self.closed = True
+                        break
+
+                    buffer += r
                 except Empty:
                     break
+
         return buffer
 
+    def is_open(self):
+        return not self.closed
+
     def close(self):
+        self.data_out.put(None)
         if self.stream_worker:
             self.stream_worker.stop()
             self.stream_worker.join()

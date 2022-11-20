@@ -6,10 +6,10 @@ __version__ = "1.0.0"
 setup(
     entry_points={
         'console_scripts': [
-            'comp7005-sender = comp7005termproject:sender_main',
-            'comp7005-reciever = comp7005termproject:receiver_main',
-            'comp7005-proxy = comp7005termproject:proxy_main',
-            'comp7005-test = comp7005termproject:test_main'
+            'comp7005-sender = comp7005endpoint.sender:sender_main',
+            'comp7005-reciever = comp7005endpoint.receiver:receiver_main',
+            'comp7005-proxy = comp7005endpoint.proxy:proxy_main',
+            'comp7005-controller = comp7005controller.app:controller_main',
         ],
     },
     name='comp7005termproject',
@@ -23,5 +23,7 @@ setup(
     description='',
     dependency_links=[],
     install_requires=[
+        "Flask==2.2.2",
+        "requests==2.28.1"
     ]
 )
