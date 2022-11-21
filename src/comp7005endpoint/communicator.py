@@ -51,7 +51,7 @@ class StreamBridge(threading.Thread):
                 self.b_transmit = b''
 """
 
-
+"""
 class Client:
     def __init__(self, host: str, port: int,
                  recv_filter: PacketMutator = None, transmit_filter: PacketMutator = None):
@@ -110,3 +110,4 @@ class ServerSingleRemote:
         self.stream.close()
         self.sock.close()
         self.attacher.join()
+"""

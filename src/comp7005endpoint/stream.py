@@ -1,16 +1,13 @@
 import math
 import queue
 import random
-import socket
-import struct
 import threading
-import select
-from dataclasses import dataclass
 from queue import Queue, Empty
 import time
 from typing import Optional, Callable
 
 from .model.controller import ControllerModel
+from .subsystem import Subsystem, SubsystemClosedException, Packet
 
 PacketMutator = Callable[['Packet'], Optional['Packet']]
 
@@ -47,37 +44,10 @@ class RandomDropMutator(PacketMutator):
         return None if random.random() <= self.chance else packet
 
 
-@dataclass(frozen=True)
-class Packet:
-    read_offset: int
-    write_offset: int
-    data: bytes
-
-    @staticmethod
-    def load(data: bytes) -> 'Packet':
-        return Packet(
-            read_offset = struct.unpack("i", data[:4])[0],
-            write_offset = struct.unpack("i", data[4:8])[0],
-            data = data[8:]
-        )
-
-    @staticmethod
-    def ack(off: int) -> 'Packet':
-        return Packet(
-            read_offset = off,
-            write_offset = -1,
-            data = bytes()
-        )
-
-    def save(self) -> bytes:
-        return \
-            struct.pack("i", self.read_offset) + \
-            struct.pack("i", self.write_offset) + \
-            self.data
-
-
 class StreamWorker(threading.Thread):
-    def __init__(self, sock: socket.socket, data_in: Queue[bytes], data_out: Queue[bytes],
+    MAX_RECV = 100
+
+    def __init__(self, subsystem: Subsystem, data_in: Queue[bytes], data_out: Queue[bytes],
                  recv_filter: PacketMutator = None, transmit_filter: PacketMutator = None,
                  ack_timeout=2):
         super().__init__()
@@ -85,10 +55,9 @@ class StreamWorker(threading.Thread):
         self.ack_timeout = ack_timeout
         self.recv_filter = recv_filter
         self.transmit_filter = transmit_filter
-        self.sock = sock
+        self.subsystem = subsystem
         self.data_in = data_in
         self.data_out = data_out
-        self.sock.setblocking(False)
 
         self.stop_event = threading.Event()
 
@@ -108,29 +77,20 @@ class StreamWorker(threading.Thread):
         if packet is None:
             return
 
-        packet_raw = packet.save()
-        packet_len = len(packet_raw)
-        transmit = struct.pack("I", packet_len) + packet_raw
-
-        self.sock.sendall(transmit)
+        self.subsystem.send(packet)
 
     def try_receive(self):
-        expected = math.inf
-        if len(self.recv_buffer) >= 4:
-            expected = 4 + struct.unpack("I", self.recv_buffer[:4])[0]
-
-        ready = select.select([self.sock], [], [], 0.01)
-
-        if ready[0]:
-            self.recv_buffer += self.sock.recv(4096)
-
-        if len(self.recv_buffer) >= expected:
-            data = self.recv_buffer[4:expected]
-            self.recv_buffer = self.recv_buffer[expected:]
-            packet = self.recv_filter(Packet.load(data))
+        # Limit packet processing so we don't starve the logic loop
+        for _ in range(StreamWorker.MAX_RECV):
+            packet = self.subsystem.recv()
 
             if packet is None:
-                return
+                break
+
+            packet = self.recv_filter(packet)
+
+            if packet is None:
+                continue
 
             if packet.read_offset == self.local_write_offset and self.pending is not None:
                 self.pending = None
@@ -185,7 +145,7 @@ class StreamWorker(threading.Thread):
 
 
 class StreamForwarder:
-    def __init__(self, src: socket.socket, dest: socket.socket, *, mutator: PacketMutator = None):
+    def __init__(self, src: Subsystem, dest: Subsystem, *, mutator: PacketMutator = None):
         self.src = src
         self.dest = dest
         self.recv_buffer = b''
@@ -196,35 +156,22 @@ class StreamForwarder:
         if packet is None:
             return
 
-        packet_raw = packet.save()
-        packet_len = len(packet_raw)
-        transmit = struct.pack("I", packet_len) + packet_raw
-
-        self.dest.sendall(transmit)
+        self.dest.send(packet)
 
     def poll(self):
         try:
-            expected = math.inf
-            if len(self.recv_buffer) >= 4:
-                expected = 4 + struct.unpack("I", self.recv_buffer[:4])[0]
+            packet = self.src.recv()
 
-            ready = select.select([self.src], [], [], 0.01)
-
-            if ready[0]:
-                self.recv_buffer += self.src.recv(4096)
-
-            if len(self.recv_buffer) >= expected:
-                data = self.recv_buffer[4:expected]
-                self.recv_buffer = self.recv_buffer[expected:]
-                self.write_raw(Packet.load(data))
-        except ConnectionError:
+            if packet is not None:
+                self.write_raw(packet)
+        except SubsystemClosedException:
             return False
 
         return True
 
 
 class StreamBridge(threading.Thread):
-    def __init__(self, sock_a: socket.socket, sock_b: socket.socket,
+    def __init__(self, sock_a: Subsystem, sock_b: Subsystem,
                  ab_filter: PacketMutator = None, ba_filter: PacketMutator = None):
 
         super().__init__()
@@ -242,34 +189,34 @@ class StreamBridge(threading.Thread):
 
 
 class Stream(object):
-    PACKET_DATASEG_SIZE = 1024
 
-    def __init__(self, *, recv_filter: Optional[PacketMutator] = None, transmit_filter: Optional[PacketMutator] = None):
+    def __init__(self, subsystem: Subsystem, *, recv_filter: Optional[PacketMutator] = None, transmit_filter: Optional[PacketMutator] = None):
         self.data_in = queue.Queue(maxsize=10)
         self.data_out = queue.Queue(maxsize=10)
         self.stream_worker: Optional[StreamWorker] = None
         self.recv_filter = recv_filter
         self.transmit_filter = transmit_filter
         self.closed = False
-
-    def attach(self, sock: socket.socket):
-        if self.stream_worker is not None:
-            raise Exception("Already attached")
+        self.max_packet_size = subsystem.get_dataseg_limit()
 
         self.stream_worker = StreamWorker(
-            sock,
+            subsystem,
             self.data_in,
             self.data_out,
             NoOpPacketMutator() if self.recv_filter is None else self.recv_filter,
             NoOpPacketMutator() if self.transmit_filter is None else self.transmit_filter
         )
+
         self.stream_worker.start()
 
+    def get_preferred_segment_size(self):
+        return self.max_packet_size
+
     def write(self, data: bytes):
-        segments = math.ceil(len(data) / Stream.PACKET_DATASEG_SIZE)
+        segments = math.ceil(len(data) / self.max_packet_size)
 
         for i in range(segments):
-            subset = data[i * Stream.PACKET_DATASEG_SIZE : (i + 1) * Stream.PACKET_DATASEG_SIZE]
+            subset = data[i * self.max_packet_size : (i + 1) * self.max_packet_size]
             self.data_in.put(subset)
 
     def read(self, min_read: int = 0, timeout=None) -> bytes:
@@ -310,3 +257,5 @@ class Stream(object):
         if self.stream_worker:
             self.stream_worker.stop()
             self.stream_worker.join()
+
+        self.closed = True

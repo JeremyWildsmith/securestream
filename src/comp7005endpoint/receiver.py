@@ -1,9 +1,11 @@
 import os
 import sys
 from argparse import ArgumentParser
-from .communicator import ServerSingleRemote
+
+from .udp import UdpServerSingleRemote
+from .tcp import TcpServerSingleRemote
 from .model.controller import ControllerModel
-from .stream import StatsRelay
+from .stream import StatsRelay, Stream
 
 
 def receiver_main():
@@ -25,16 +27,32 @@ def receiver_main():
         default="http://127.0.0.1:5000"
     )
 
+    parser.add_argument(
+        "--udp",
+        help="Use UDP Subsystem instead of default TCP subsstem",
+        action='store_true'
+    )
+
     args = parser.parse_args()
 
     controller = ControllerModel(args.controller)
-    server = ServerSingleRemote(
-        args.port,
-        transmit_filter=StatsRelay("server_sent", controller),
-        recv_filter=StatsRelay("server_recv", controller),
-    )
 
-    with server as server_stream:
+    if args.udp:
+        server = UdpServerSingleRemote(
+            args.port
+        )
+    else:
+        server = TcpServerSingleRemote(
+            args.port
+        )
+
+    with server as server_subsystem:
+        server_stream = Stream(
+            server_subsystem,
+            transmit_filter=StatsRelay("server_sent", controller),
+            recv_filter=StatsRelay("server_recv", controller)
+        )
+
         while server_stream.is_open():
             with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as stdout:
                 stdout.write(server_stream.read(1))

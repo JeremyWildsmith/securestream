@@ -1,6 +1,8 @@
 import sys
 from argparse import ArgumentParser
-from .communicator import Client
+
+from .udp import UdpClient
+from .tcp import TcpClient
 from .model.controller import ControllerModel
 from .stream import Stream, StatsRelay
 
@@ -8,7 +10,7 @@ from .stream import Stream, StatsRelay
 def transmit_file(stream: Stream, file: str):
     with open(file, "rb") as f:
         while True:
-            rbuffer = f.read(Stream.PACKET_DATASEG_SIZE)
+            rbuffer = f.read(stream.get_preferred_segment_size())
 
             if len(rbuffer) == 0:
                 break
@@ -55,22 +57,39 @@ def sender_main():
         default="http://127.0.0.1:5000"
     )
 
+    parser.add_argument(
+        "--udp",
+        help="Use UDP Subsystem instead of default TCP subsstem",
+        action='store_true'
+    )
+
     args = parser.parse_args()
 
     controller = ControllerModel(args.controller)
-    client = Client(
-        args.target,
-        args.target_port,
-        transmit_filter=StatsRelay("client_sent", controller),
-        recv_filter=StatsRelay("client_recv", controller)
-    )
 
-    with client as client_stream:
+    if args.udp:
+        client = UdpClient(
+            args.target,
+            args.target_port
+        )
+    else:
+        client = TcpClient(
+            args.target,
+            args.target_port
+        )
+
+    with client as client_subsystem:
+        client_stream = Stream(
+            client_subsystem,
+            transmit_filter=StatsRelay("client_sent", controller),
+            recv_filter=StatsRelay("client_recv", controller)
+        )
+
         if args.file:
             transmit_file(client_stream, args.file)
         else:
             transmit_stdin(client_stream)
 
 
-if __name__ == "__man__":
+if __name__ == "__main__":
     sender_main()

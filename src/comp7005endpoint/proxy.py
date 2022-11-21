@@ -1,9 +1,12 @@
 import time
 from argparse import ArgumentParser
-from .communicator import ServerSingleRemote, Client
+
+from comp7005endpoint.udp import UdpClient, UdpServerSingleRemote
+from .tcp import TcpSocketSubsystem, TcpClient, TcpServerSingleRemote
 from .model.controller import ControllerModel
 from .stream import RandomDropMutator, StreamBridge
 import socket
+
 
 def proxy_main():
     parser = ArgumentParser(
@@ -38,8 +41,14 @@ def proxy_main():
         default="http://127.0.0.1:5000"
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--udp",
+        help="Use UDP Subsystem instead of default TCP subsstem",
+        action='store_true'
+    )
 
+    args = parser.parse_args()
+    """
     print("Waiting for connection to proxy...")
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("0.0.0.0", args.proxy_port))
@@ -54,22 +63,42 @@ def proxy_main():
 
     print("Target connection established. Bridging")
 
+
+    controller = ControllerModel(args.controller)
+
+    client_subsystem = TcpSocketSubsystem(client)
+    target_subsystem = TcpSocketSubsystem(target)
+    """
+    controller = ControllerModel(args.controller)
+
     client_serv_filter = RandomDropMutator(0.0)
     serv_client_filter = RandomDropMutator(0.0)
 
-    controller = ControllerModel(args.controller)
-    try:
-        bridge = StreamBridge(client, target, client_serv_filter, serv_client_filter)
-        bridge.start()
+    if args.udp:
+        client = UdpServerSingleRemote(args.proxy_port)
+        target = UdpClient(args.target, args.target_port)
+    else:
+        client = TcpServerSingleRemote(args.proxy_port)
+        target = TcpClient(args.target, args.target_port)
 
-        while bridge.is_alive():
-            time.sleep(0.2)
+    with client as client_subsystem:
+        with target as target_subsystem:
+            try:
+                bridge = StreamBridge(
+                    client_subsystem,
+                    target_subsystem,
+                    client_serv_filter, serv_client_filter)
+                bridge.start()
 
-            client_serv_filter.set_drop(controller.get_config("client_server_drop", 0.0) / 100.0)
-            serv_client_filter.set_drop(controller.get_config("server_client_drop", 0.0) / 100.0)
-    finally:
-        client.close()
-        target.close()
+                while bridge.is_alive():
+                    time.sleep(0.2)
+
+                    client_serv_filter.set_drop(controller.get_config("client_server_drop", 0.0) / 100.0)
+                    serv_client_filter.set_drop(controller.get_config("server_client_drop", 0.0) / 100.0)
+            finally:
+                client_subsystem.close()
+                target_subsystem.close()
+
 
 if __name__ == "__main__":
     proxy_main()

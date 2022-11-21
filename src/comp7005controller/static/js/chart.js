@@ -52,20 +52,6 @@ function create_chart() {
                 type: undefined
             },
             {
-                selected: false,
-                showInNavigator: true,
-                data: [],
-                name: "Proxy (Send)",
-                type: undefined
-            },
-            {
-                selected: false,
-                showInNavigator: true,
-                data: [],
-                name: "Proxy (Recv)",
-                type: undefined
-            },
-            {
                 selected: true,
                 showInNavigator: true,
                 data: [],
@@ -138,10 +124,8 @@ function refresh_data() {
             time = Date.now()
             chart.series[0].addPoint([time, raw.sample.client_sent])
             chart.series[1].addPoint([time, raw.sample.client_recv])
-            chart.series[2].addPoint([time, raw.sample.proxy_sent])
-            chart.series[3].addPoint([time, raw.sample.proxy_recv])
-            chart.series[4].addPoint([time, raw.sample.server_sent])
-            chart.series[5].addPoint([time, raw.sample.server_recv])
+            chart.series[2].addPoint([time, raw.sample.server_sent])
+            chart.series[3].addPoint([time, raw.sample.server_recv])
             //date = Date.now()
             //data_.push([date, temp])
             //console.log(data_)
