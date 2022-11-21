@@ -4,7 +4,7 @@ import random
 import threading
 from queue import Queue, Empty
 import time
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Tuple, Dict
 
 from .model.controller import ControllerModel
 from .subsystem import Subsystem, SubsystemClosedException, Packet
@@ -46,12 +46,15 @@ class RandomDropMutator(PacketMutator):
 
 class StreamWorker(threading.Thread):
     MAX_RECV = 100
+    MAX_WINDOW_SIZE = 10
 
     def __init__(self, subsystem: Subsystem, data_in: Queue[bytes], data_out: Queue[bytes],
                  recv_filter: PacketMutator = None, transmit_filter: PacketMutator = None,
                  ack_timeout=2):
         super().__init__()
 
+        self.recv_window: Dict[int, bytes] = {}
+        self.window_size = 2
         self.ack_timeout = ack_timeout
         self.recv_filter = recv_filter
         self.transmit_filter = transmit_filter
@@ -61,11 +64,13 @@ class StreamWorker(threading.Thread):
 
         self.stop_event = threading.Event()
 
+        self.max_remote_read_offset = 0
+
         self.local_read_offset = 0
         self.local_write_offset = 0
 
         self.last_write_ack = time.time() #The last time our write was acked
-        self.pending: Optional[Packet] = None
+        self.pending: List[Tuple[int, Packet]] = []
 
         self.recv_buffer = b''
 
@@ -78,6 +83,11 @@ class StreamWorker(threading.Thread):
             return
 
         self.subsystem.send(packet)
+
+    def clean_pending(self):
+        while self.pending and self.pending[0][0] <= self.max_remote_read_offset:
+            self.pending = self.pending[1:]
+            self.last_write_ack = time.time()
 
     def try_receive(self):
         # Limit packet processing so we don't starve the logic loop
@@ -92,12 +102,20 @@ class StreamWorker(threading.Thread):
             if packet is None:
                 continue
 
-            if packet.read_offset == self.local_write_offset and self.pending is not None:
-                self.pending = None
+            self.max_remote_read_offset = max(packet.read_offset, self.max_remote_read_offset)
+            self.clean_pending()
 
-            if packet.write_offset == self.local_read_offset:
-                self.local_read_offset += 1
-                self.data_out.put(packet.data)
+            #if packet.read_offset == self.local_write_offset and self.pending is not None:
+            #    self.pending = None
+
+            if packet.write_offset >= self.local_read_offset and packet.write_offset not in self.recv_window:
+                self.recv_window[packet.write_offset] = packet.data
+
+                while self.local_read_offset in self.recv_window:
+                    self.data_out.put(self.recv_window.pop(self.local_read_offset))
+                    self.local_read_offset += 1
+
+
 
             # If the packet was not just an ack (IE transmitted data)
             # then we want to either acknowledge that data or let remote know what is missing
@@ -108,27 +126,33 @@ class StreamWorker(threading.Thread):
                 self.write_raw(Packet.ack(self.local_read_offset))
 
     def transmit_pending(self):
-        if self.pending is None:
+        self.clean_pending()
+
+        if not self.pending:
             return
 
-        next_packet = Packet(self.local_read_offset, self.pending.write_offset, self.pending.data)
-        self.write_raw(next_packet)
+        for i in range(min(len(self.pending), self.window_size)):
+            p = self.pending[i]
+            next_packet = Packet(self.local_read_offset, p[1].write_offset, p[1].data)
+            self.write_raw(next_packet)
 
     def try_transmit(self):
-        if self.pending:
-            if self.last_write_ack + self.ack_timeout > time.time():
-                return
-
+        if self.pending and self.last_write_ack + self.ack_timeout < time.time():
             self.last_write_ack = time.time()
             self.transmit_pending()
-        else:
+            self.window_size = 1
+
+        if len(self.pending) < self.window_size:
             try:
                 data_in = self.data_in.get(block=False)
 
-                self.pending = Packet(self.local_read_offset, self.local_write_offset, data_in)
-                self.last_write_ack = time.time()
-                self.transmit_pending()
+                new_packet = Packet(self.local_read_offset, self.local_write_offset, data_in)
                 self.local_write_offset += 1
+                self.pending.append((self.local_write_offset, new_packet))
+                self.last_write_ack = time.time()
+                self.write_raw(new_packet)
+
+                self.window_size = min(self.window_size + 1, StreamWorker.MAX_WINDOW_SIZE)
             except Empty:
                 pass
 
