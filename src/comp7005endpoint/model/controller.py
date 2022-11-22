@@ -8,7 +8,7 @@ import sys
 
 class ControllerModel:
     RETRY_DELAY = 30
-    CACHE_LIFE = 1
+    CACHE_LIFE = 3
 
     def __init__(self, endpoint):
         self.endpoint = endpoint

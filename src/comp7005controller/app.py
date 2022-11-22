@@ -19,28 +19,28 @@ def home_page():
 
 sc_drop = 0
 cs_drop = 0
-window_size = 1
+recv_delay = 1
 
 
 @app.route("/config", methods=["POST"])
 def apply_config():
-    global sc_drop, cs_drop, window_size
+    global sc_drop, cs_drop, recv_delay
     content = request.json
     cs_drop = content["client_server_drop"]
     sc_drop = content["server_client_drop"]
-    window_size = content["window_size"]
+    recv_delay = content["recv_delay"]
 
     return ""
 
 
 @app.route("/config", methods=["GET"])
 def get_config():
-    global sc_drop, cs_drop, window_size
+    global sc_drop, cs_drop, recv_delay
 
     return {
         "client_server_drop": cs_drop,
         "server_client_drop": sc_drop,
-        "window_size": window_size,
+        "recv_delay": recv_delay,
     }
 
 

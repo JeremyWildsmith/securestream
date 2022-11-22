@@ -7,26 +7,30 @@ import struct
 class Packet:
     read_offset: int
     write_offset: int
+    recv_window_size: int
     data: bytes
 
     @staticmethod
     def load(data: bytes) -> 'Packet':
         return Packet(
-            read_offset = struct.unpack("i", data[:4])[0],
-            write_offset = struct.unpack("i", data[4:8])[0],
-            data = data[8:]
+            recv_window_size=struct.unpack("i", data[:4])[0],
+            read_offset=struct.unpack("i", data[4:8])[0],
+            write_offset=struct.unpack("i", data[8:12])[0],
+            data=data[12:]
         )
 
     @staticmethod
-    def ack(off: int) -> 'Packet':
+    def ack(off: int, recv_window_size: int) -> 'Packet':
         return Packet(
-            read_offset = off,
-            write_offset = -1,
-            data = bytes()
+            recv_window_size=recv_window_size,
+            read_offset=off,
+            write_offset=-1,
+            data=bytes()
         )
 
     def save(self) -> bytes:
         return \
+            struct.pack("i", self.recv_window_size) + \
             struct.pack("i", self.read_offset) + \
             struct.pack("i", self.write_offset) + \
             self.data

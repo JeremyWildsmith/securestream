@@ -38,6 +38,9 @@
                     <div class="card mb-4">
                         <div class="card-header">Proxy Corruption</div>
                         <div class="card-body">
+                            <div class="alert alert-primary" role="alert">
+                              Note, these settings can take upwards of 5 seconds to take effect.
+                            </div>
                             <div class="input-group">
                                 <label for="cliServDrop" class="form-label"><b>Drop Packet (Client -> Server):</b></label><p>&nbsp;</p>
                                 <output>0%</output>
@@ -47,9 +50,14 @@
                                 <output>0%</output>
                                 <input type="range" class="form-range" id="servCliDrop" value="0" min="0" max="100" oninput="this.previousElementSibling.value = this.value + '%'"  onchange="send_config()">
 
-                                <label for="windowSize" class="form-label"><b>Window Size:</b></label><p>&nbsp;</p>
-                                <output>1</output>
-                                <input type="range" class="form-range" id="windowSize" value="0" min="1" max="5"  oninput="this.previousElementSibling.value = this.value"  onchange="send_config()">
+                                <label for="recvDelay" class="form-label"><b>Receive Process Delay (s):</b></label><p>&nbsp;</p>
+                                <output>0s</output>
+                                <input type="range" class="form-range" id="recvDelay" value="0" min="0" max="5"  oninput="this.previousElementSibling.value = this.value + 's'"  onchange="send_config()">
+
+                                <p>This setting does <b>not</b> directly delay the receiving or transmission packets. Instead, it delays the
+                                    processing of data in the application logic of the receiver thus causing the receive buffer to fill and exhaust the receive window.
+                                    Therefore, this will trigger back-off behaviour in the sender.</p>
+
                             </div>
                         </div>
                     </div>

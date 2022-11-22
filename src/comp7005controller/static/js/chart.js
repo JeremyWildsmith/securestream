@@ -1,6 +1,9 @@
 
 function create_chart() {
     chart = new Highcharts.Chart('graph-container', {
+        chart: {
+            type: 'spline'
+        },
         navigator: {
           enabled: true
         },
@@ -34,6 +37,17 @@ function create_chart() {
             series: {
                 showInNavigator: true,
                 showCheckbox: true
+            },
+            spline: {
+                lineWidth: 3,
+                states: {
+                    hover: {
+                        lineWidth: 5
+                    }
+                },
+                marker: {
+                    enabled: false
+                }
             }
         },
         series: [
@@ -90,7 +104,7 @@ function send_config() {
         data: JSON.stringify({
             client_server_drop: parseInt(document.getElementById("cliServDrop").value),
             server_client_drop: parseInt(document.getElementById("servCliDrop").value),
-            window_size: parseInt(document.getElementById("windowSize").value)
+            recv_delay: parseInt(document.getElementById("recvDelay").value)
         }),
         contentType: "application/json; charset=utf-8",
         dataType: "json",

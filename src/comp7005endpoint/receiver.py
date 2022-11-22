@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from argparse import ArgumentParser
 
 from .udp import UdpServerSingleRemote
@@ -29,7 +30,7 @@ def receiver_main():
 
     parser.add_argument(
         "--udp",
-        help="Use UDP Subsystem instead of default TCP subsstem",
+        help="Use UDP Subsystem instead of default TCP subsystem",
         action='store_true'
     )
 
@@ -57,6 +58,11 @@ def receiver_main():
             with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as stdout:
                 stdout.write(server_stream.read(1))
                 stdout.flush()
+
+                delay = controller.get_config("recv_delay", 0)
+
+                if delay > 0:
+                    time.sleep(delay)
 
 
 if __name__ == "__main__":
