@@ -19,7 +19,7 @@ def home_page():
 
 sc_drop = 0
 cs_drop = 0
-recv_delay = 1
+recv_delay = 0
 
 
 @app.route("/config", methods=["POST"])
