@@ -31,6 +31,9 @@ class TcpSocketSubsystem(Subsystem):
             while self.sock is None:
                 time.sleep(0.1)
 
+            if self.is_closed():
+                raise SubsystemClosedException()
+
             packet_raw = packet.save()
             packet_len = len(packet_raw)
             transmit = struct.pack("I", packet_len) + packet_raw
@@ -43,6 +46,9 @@ class TcpSocketSubsystem(Subsystem):
     def recv(self) -> Optional[Packet]:
         if self.sock is None:
             return None
+
+        if self.is_closed():
+            raise SubsystemClosedException()
 
         expected = math.inf
         if len(self.recv_buffer) >= 4:
@@ -78,15 +84,19 @@ class TcpClient:
     def __init__(self, host: str, port: int):
         super().__init__()
         self.connection_config = (host, port)
+        self.subsystem: TcpSocketSubsystem = None
 
     def __enter__(self) -> Subsystem:
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(self.connection_config)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(self.connection_config)
 
-        return TcpSocketSubsystem(self.sock)
+        self.subsystem = TcpSocketSubsystem(sock)
+
+        return self.subsystem
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.sock.close()
+        if self.subsystem:
+            self.subsystem.close()
 
 
 class TcpServerSocketAttacher(threading.Thread):

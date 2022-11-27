@@ -3,10 +3,18 @@ import sys
 import time
 from argparse import ArgumentParser
 
+from .subsystem import Subsystem
 from .udp import UdpServerSingleRemote
 from .tcp import TcpServerSingleRemote
 from .model.controller import ControllerModel
 from .stream import StatsRelay, Stream
+
+
+def create_stream(subsystem: Subsystem, controller: ControllerModel):
+    transmit_filter = StatsRelay("server_sent", controller)
+    recv_filter = StatsRelay("server_recv", controller)
+
+    return Stream(subsystem, transmit_filter=transmit_filter, recv_filter=recv_filter)
 
 
 def receiver_main():
@@ -48,21 +56,16 @@ def receiver_main():
         )
 
     with server as server_subsystem:
-        server_stream = Stream(
-            server_subsystem,
-            transmit_filter=StatsRelay("server_sent", controller),
-            recv_filter=StatsRelay("server_recv", controller)
-        )
+        with create_stream(server_subsystem, controller) as server_stream:
+            while server_stream.is_open():
+                with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as stdout:
+                    stdout.write(server_stream.read(1))
+                    stdout.flush()
 
-        while server_stream.is_open():
-            with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as stdout:
-                stdout.write(server_stream.read(1))
-                stdout.flush()
+                    delay = controller.get_config("recv_delay", 0)
 
-                delay = controller.get_config("recv_delay", 0)
-
-                if delay > 0:
-                    time.sleep(delay)
+                    if delay > 0:
+                        time.sleep(delay)
 
 
 if __name__ == "__main__":

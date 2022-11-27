@@ -305,7 +305,16 @@ class Stream(object):
     def is_open(self):
         return not self.closed
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+
     def close(self):
+        if self.closed:
+            return
+
         self.data_out.put(None)
         if self.stream_worker:
             self.stream_worker.stop()

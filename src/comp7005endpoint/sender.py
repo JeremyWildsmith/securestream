@@ -1,6 +1,7 @@
 import sys
 from argparse import ArgumentParser
 
+from .subsystem import Subsystem
 from .udp import UdpClient
 from .tcp import TcpClient
 from .model.controller import ControllerModel
@@ -22,6 +23,13 @@ def transmit_stdin(stream: Stream):
     for l in sys.stdin:
         print("Writing: " + l)
         stream.write(l.encode("utf-8"))
+
+
+def create_stream(subsystem: Subsystem, controller: ControllerModel):
+    send_stat = StatsRelay("client_sent", controller)
+    recv_stat = StatsRelay("client_recv", controller)
+
+    return Stream(subsystem, transmit_filter=send_stat, recv_filter=recv_stat)
 
 
 def sender_main():
@@ -79,16 +87,12 @@ def sender_main():
         )
 
     with client as client_subsystem:
-        client_stream = Stream(
-            client_subsystem,
-            transmit_filter=StatsRelay("client_sent", controller),
-            recv_filter=StatsRelay("client_recv", controller)
-        )
+        with create_stream(client_subsystem, controller) as client_stream:
+            if args.file:
+                transmit_file(client_stream, args.file)
+            else:
+                transmit_stdin(client_stream)
 
-        if args.file:
-            transmit_file(client_stream, args.file)
-        else:
-            transmit_stdin(client_stream)
 
 
 if __name__ == "__main__":
