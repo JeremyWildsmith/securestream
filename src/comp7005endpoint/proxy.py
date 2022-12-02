@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from comp7005endpoint.udp import UdpClient, UdpServerSingleRemote
 from .tcp import TcpSocketSubsystem, TcpClient, TcpServerSingleRemote
 from .model.controller import ControllerModel
-from .stream import RandomDropMutator, StreamBridge
+from .stream import RandomDropMutator, SubsystemBridge
 import socket
 
 
@@ -48,27 +48,7 @@ def proxy_main():
     )
 
     args = parser.parse_args()
-    """
-    print("Waiting for connection to proxy...")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("0.0.0.0", args.proxy_port))
-    sock.listen(0)
-    client = sock.accept()[0]
-    sock.close()
 
-    print("Establishing connection to target...")
-
-    target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    target.connect((args.target, args.target_port))
-
-    print("Target connection established. Bridging")
-
-
-    controller = ControllerModel(args.controller)
-
-    client_subsystem = TcpSocketSubsystem(client)
-    target_subsystem = TcpSocketSubsystem(target)
-    """
     controller = ControllerModel(args.controller)
 
     client_serv_filter = RandomDropMutator(0.0)
@@ -84,7 +64,7 @@ def proxy_main():
     with client as client_subsystem:
         with target as target_subsystem:
             try:
-                bridge = StreamBridge(
+                bridge = SubsystemBridge(
                     client_subsystem,
                     target_subsystem,
                     client_serv_filter, serv_client_filter)

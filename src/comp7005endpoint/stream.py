@@ -76,7 +76,6 @@ class StreamWorker(threading.Thread):
         self.last_write_ack = time.time() #The last time our write was acked
         self.pending: List[Tuple[int, Packet]] = []
         self.recv_window_size_hint = []
-        self.recv_buffer = b''
 
         self.backoff_since = 0
 
@@ -223,7 +222,7 @@ class StreamForwarder:
         return True
 
 
-class StreamBridge(threading.Thread):
+class SubsystemBridge(threading.Thread):
     def __init__(self, sock_a: Subsystem, sock_b: Subsystem,
                  ab_filter: PacketMutator = None, ba_filter: PacketMutator = None):
 
