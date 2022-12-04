@@ -1,7 +1,7 @@
 import time
 from argparse import ArgumentParser
 
-from comp7005endpoint.udp import UdpClient, UdpServerSingleRemote
+from .udp import UdpClient, UdpServerSingleRemote
 from .tcp import TcpSocketSubsystem, TcpClient, TcpServerSingleRemote
 from .model.controller import ControllerModel
 from .stream import RandomDropMutator, SubsystemBridge
@@ -43,7 +43,7 @@ def proxy_main():
 
     parser.add_argument(
         "--udp",
-        help="Use UDP Subsystem instead of default TCP subsstem",
+        help="Use UDP Subsystem instead of default TCP subsystem",
         action='store_true'
     )
 

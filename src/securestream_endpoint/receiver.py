@@ -7,20 +7,27 @@ from .subsystem import Subsystem
 from .udp import UdpServerSingleRemote
 from .tcp import TcpServerSingleRemote
 from .model.controller import ControllerModel
-from .stream import StatsRelay, Stream
+from .stream import StatsRelay, Stream, CompositeMutator
+from .crypto import build_cryptor
 
 
-def create_stream(subsystem: Subsystem, controller: ControllerModel):
+def create_stream(subsystem: Subsystem, controller: ControllerModel, pub_key: str = None, priv_key: str = None):
     transmit_filter = StatsRelay("server_sent", controller)
     recv_filter = StatsRelay("server_recv", controller)
+
+    if pub_key:
+        recv_filter = CompositeMutator(build_cryptor(pub_key), recv_filter)
+
+    if priv_key:
+        transmit_filter = CompositeMutator(transmit_filter, build_cryptor(priv_key))
 
     return Stream(subsystem, transmit_filter=transmit_filter, recv_filter=recv_filter)
 
 
 def receiver_main():
     parser = ArgumentParser(
-        prog='proxy',
-        description='Proxy server for controlling data drop-rates.')
+        prog='receiver',
+        description='Receiver server for collecting data from a sender.')
 
     parser.add_argument(
         "--port",
@@ -42,6 +49,18 @@ def receiver_main():
         action='store_true'
     )
 
+    parser.add_argument(
+        "--pub-key",
+        help="Public key file to use for decrypting received data.",
+        type=str
+    )
+
+    parser.add_argument(
+        "--priv-key",
+        help="Private key file, used for encrypting received data.",
+        type=str
+    )
+
     args = parser.parse_args()
 
     controller = ControllerModel(args.controller)
@@ -56,7 +75,7 @@ def receiver_main():
         )
 
     with server as server_subsystem:
-        with create_stream(server_subsystem, controller) as server_stream:
+        with create_stream(server_subsystem, controller, args.pub_key, args.priv_key) as server_stream:
             while server_stream.is_open():
                 with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as stdout:
                     stdout.write(server_stream.read(1))

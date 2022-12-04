@@ -6,13 +6,14 @@ __version__ = "1.0.0"
 setup(
     entry_points={
         'console_scripts': [
-            'comp7005-sender = comp7005endpoint.sender:sender_main',
-            'comp7005-reciever = comp7005endpoint.receiver:receiver_main',
-            'comp7005-proxy = comp7005endpoint.proxy:proxy_main',
-            'comp7005-controller = comp7005controller.app:controller_main',
+            'stream-sender = securestream_endpoint.sender:sender_main',
+            'stream-receiver = securestream_endpoint.receiver:receiver_main',
+            'stream-proxy = securestream_endpoint.proxy:proxy_main',
+            'stream-controller = securestream_controller.app:controller_main',
+            'stream-rsagen = securestream_endpoint.rsa:rsagen_main',
         ],
     },
-    name='comp7005termproject',
+    name='securestream',
     version=__version__,
     packages=find_packages("src"),
     package_dir={'': 'src'},
@@ -24,6 +25,7 @@ setup(
     dependency_links=[],
     install_requires=[
         "Flask==2.2.2",
-        "requests==2.28.1"
+        "requests==2.28.1",
+        "egcd==0.4.3"
     ]
 )

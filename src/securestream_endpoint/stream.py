@@ -12,18 +12,29 @@ from .subsystem import Subsystem, SubsystemClosedException, Packet
 PacketMutator = Callable[['Packet'], Optional['Packet']]
 
 
+class CompositeMutator(PacketMutator):
+
+    def __init__(self, first: PacketMutator, last: PacketMutator):
+        self.first = first
+        self.last = last
+
+    def __call__(self, packet: 'Packet'):
+        f = self.first(packet)
+
+        if f:
+            f = self.last(f)
+
+        return f
+
+
+
 class StatsRelay(PacketMutator):
-    def __init__(self, key: str, controller: ControllerModel, *, inner: PacketMutator = None):
+    def __init__(self, key: str, controller: ControllerModel):
         self.controller = controller
-        self.inner = inner
         self.key = key
 
     def __call__(self, packet: 'Packet'):
-        if self.inner:
-            packet = self.inner(packet)
-
-        if packet:
-            self.controller.post_delta(self.key)
+        self.controller.post_delta(self.key)
 
         return packet
 

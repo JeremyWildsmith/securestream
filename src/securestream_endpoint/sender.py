@@ -1,11 +1,12 @@
 import sys
 from argparse import ArgumentParser
 
+from .crypto import build_cryptor
 from .subsystem import Subsystem
 from .udp import UdpClient
 from .tcp import TcpClient
 from .model.controller import ControllerModel
-from .stream import Stream, StatsRelay
+from .stream import Stream, StatsRelay, CompositeMutator
 
 
 def transmit_file(stream: Stream, file: str):
@@ -25,9 +26,15 @@ def transmit_stdin(stream: Stream):
         stream.write(l.encode("utf-8"))
 
 
-def create_stream(subsystem: Subsystem, controller: ControllerModel):
+def create_stream(subsystem: Subsystem, controller: ControllerModel, pub_key: str = None, priv_key: str = None):
     send_stat = StatsRelay("client_sent", controller)
     recv_stat = StatsRelay("client_recv", controller)
+
+    if pub_key:
+        recv_stat = CompositeMutator(build_cryptor(pub_key), recv_stat)
+
+    if priv_key:
+        send_stat = CompositeMutator(send_stat, build_cryptor(priv_key))
 
     return Stream(subsystem, transmit_filter=send_stat, recv_filter=recv_stat)
 
@@ -71,6 +78,18 @@ def sender_main():
         action='store_true'
     )
 
+    parser.add_argument(
+        "--pub-key",
+        help="Public key file to use for decrypting received data.",
+        type=str
+    )
+
+    parser.add_argument(
+        "--priv-key",
+        help="Private key file, used for encrypting received data.",
+        type=str
+    )
+
     args = parser.parse_args()
 
     controller = ControllerModel(args.controller)
@@ -87,7 +106,7 @@ def sender_main():
         )
 
     with client as client_subsystem:
-        with create_stream(client_subsystem, controller) as client_stream:
+        with create_stream(client_subsystem, controller, args.pub_key, args.priv_key) as client_stream:
             if args.file:
                 transmit_file(client_stream, args.file)
             else:
